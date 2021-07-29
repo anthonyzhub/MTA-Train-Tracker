@@ -1,84 +1,77 @@
-from protobuf_to_dict import protobuf_to_dict
-import time
-
 class ManageData:
 
-    def __init__(self, protocol_buffer_data, stationNamesDict) -> None:
+    def __init__(self, protocolBufferDataList, savedStationsDict) -> None:
 
-        # Convert protocol buffer into a dictionary
-        self.dataDictionary = protobuf_to_dict(protocol_buffer_data)
-        self.protocol_buffer_data = protocol_buffer_data
+        # Create a list to save all data received from MTA
+        self.protocolBufferDataList = protocolBufferDataList
 
-        # Save train stops before Hunts Point Av.
-        self.stopsBeforeHuntsPointList = [str(i) for i in range(601, 614)] # 613 is Hunts Point
-        self.stopsBeforeSimpsonStList = [str(i) for i in range(204, 218)] # 217 is Simpson St.
+        # Create a list to save trains to lookout for
+        self.preferredTrains = list("2456Q")
+        self.savedStationsDict = savedStationsDict
 
-        # Create a dictionary to save station's id
-        self.stationNamesDict = stationNamesDict
-
-        # Create a dictionary to save trains' ETA
-        self.trainsETADict = dict()
+        # Set variable to save preferred station
+        self.preferredStation = str()
 
     def errorMessage(self, message):
         print(message)
         exit(0)
 
-    def printETADictionary(self):
+    def setPreferredStation(self, preferredStation):
 
-        for key, val in self.trainsETADict.items():
-            # print(key, val, "min")
-            print("{} arriving in {} minutes".format(key, val))
+        # OBJECTIVE: Frequently used function to update string variable
+        self.preferredStation = preferredStation
 
-    def getTripUpdate(self):
+    def getTrainsData(self):
 
-        # OBJECTIVE: Iterate data and only get trains
+        # OBJECTIVE: Go through GTFS data and only keep data related to trains
 
         trainsList = list()
 
         # Iterate data and only get entity (train)
-        for entity in self.protocol_buffer_data.entity:
+        for elem in self.protocolBufferDataList:
+            for entity in elem.entity:
 
-            # Filter data out by only looking for trains
-            try:
-                if entity.HasField("trip_update"):
-                    trainsList.append(entity)
-            except:
-                self.errorMessage("'trip_update' does not exist!")
+                # Filter data out by only looking for trains
+                try:
+                    if entity.HasField("trip_update"):
+                        trainsList.append(entity)
+                except:
+                    self.errorMessage("'trip_update' does not exist!")
 
         return trainsList
 
-    def getNumericTrains(self):
+    def getSpecificTrains(self):
 
-        # OBJECTIVE: Get train-only data and only keep data of 2, 5, and 6 trains
+        # OBJECTIVE: Filter trains-only data to trains that user only cares about
 
         # Get list of entities
-        entitiesList = self.getTripUpdate()
+        entitiesList = self.getTrainsData()
 
-        # Create a list to save entities of 2/5/6 trains
-        preferedTrains = list()
+        # Create a list to save entities of preferred trains
+        preferredTrains = list()
 
-        # Iterate data and only keep 2/5/6 trains
+        # Iterate data and only keep preferred trains
         for entity in entitiesList:
 
-            # If "route_id" is either a 2/5/6, then keep it
+            # If "route_id" is saved in list, then keep it
             try:
                 if entity.trip_update.HasField("trip"):
-                    if entity.trip_update.trip.route_id in ["2", "5", "6"]:
-                        # print("{} is a 2/5/6 train".format(entity.id))
-                        preferedTrains.append(entity)
+                    if entity.trip_update.trip.route_id in self.preferredTrains:
+                        # print("{} is a {} train".format(entity.id, entity.trip_update.trip.route_id))
+                        preferredTrains.append(entity)
             except:
                 self.errorMessage("'trip' field does not exist!")
 
-        return preferedTrains
+        return preferredTrains
 
     def getSouthBoundTrains(self):
 
         # OBJECTIVE: Get train-only data and only keep trains heading downtown
 
         # Get list of entities
-        entitiesList = self.getNumericTrains()
+        entitiesList = self.getSpecificTrains()
         
-        # Create a list to save southbound 2/5/6 trains
+        # Create a list to save southbound trains
         southboundTrains = list()
 
         # Iterate list and only keep trains heading downtown
@@ -87,54 +80,57 @@ class ManageData:
             # Check if train is heading downtown based on "stop_id"
             # NOTE: If "stop_id" ends with a "S" for south, then train is heading downtown
             try:
-                if entity.trip_update.stop_time_update[0].stop_id[-1] == "S":
-                    # print("{} is heading South".format(entity.id))
-                    southboundTrains.append(entity)
+                
+                try:
+                    # print(entity.trip_update.stop_time_update[0].stop_id)
+                    if entity.trip_update.stop_time_update[0].stop_id[-1] == "S":
+                        # print("{} is heading South".format(entity.id))
+                        southboundTrains.append(entity)
+                except IndexError as error:
+                        print(entity.trip_update.stop_time_update)
+                        # print(entity.trip_update.stop_time_update[0].stop_id)
+                        self.errorMessage("Error might be coming from 'stop_time_update[0]'\n".format(error))
+
             except AttributeError as error:
                 self.errorMessage("An attribute doesn't exist!\nError: {}".format(error))
 
         return southboundTrains
 
-    def getTrainsBeforeDesignatedStop(self, preferedStation):
+    def getTrainsBeforeDesignatedStop(self):
 
         # OBJECTIVE: Get a list of southbound trains heading to Hunts Point or Simpson street station
-
-        # Create reference to pre-defined lists
-        if preferedStation == "Hunts Point Av":
-            print("getTrainsBeforeDesignatedStop() => Focusing on Hunts Point Avenue station")
-            stopsBeforeDesignatedStation = self.stopsBeforeHuntsPointList
-        else:
-            print("getTrainsBeforeDesignatedStop() => Focusing on Simpson St. station")
-            stopsBeforeDesignatedStation = self.stopsBeforeSimpsonStList
 
         # Get list of entities
         entitiesList = self.getSouthBoundTrains()
 
-        # Create a list of trains heading to Hunts Point
+        # Create a list of trains heading to preferredStation
         upcomingTrains = list()
         
         # Sort list based on "stop_id" value in descending order
         entitiesList.sort(key=lambda entity: entity.trip_update.stop_time_update[0].stop_id, reverse=True)
         
-        # Remove trains that already passed Hunts Point Avenue
+        # Remove trains that already passed preferredStation
         for entity in entitiesList:
 
-            # If next stop is not inside the list, then the train has already passed Hunts Point station
+            # If next stop is not inside the list, then the train has already passed preferredStation
             # NOTE: Excluded last character because it indicates direction (north or south)
-            if entity.trip_update.stop_time_update[0].stop_id[:-1] in stopsBeforeDesignatedStation:
-                # print(entity.trip_update.stop_time_update[0].stop_id)
+            if entity.trip_update.stop_time_update[0].stop_id[:-1] in self.savedStationsDict[self.preferredStation][3]:
+                # print("{} is at {} before {}".format(entity.id, entity.trip_update.stop_time_update[0].stop_id, self.savedStationsDict[self.preferredStation][0]))
                 upcomingTrains.append(entity)
         
         return upcomingTrains
 
-    def calculateTrainsETAToStation(self, preferredTrainsList, preferredStation):
+    def calculateTrainsETAToStation(self):
 
-        # Get station's id
-        stop_id = self.stationNamesDict[preferredStation]
-        print("calculateTrainsETAToStation() => Calculating ETA to ", preferredStation)
+        # Get preferredStation's stop_id
+        stop_id = self.savedStationsDict[self.preferredStation][0]
+        print("calculateTrainsETAToStation() => Calculating ETA to", self.preferredStation)
+
+        # Get a list of southbound trains heading to preferredStation
+        availableTrainsList = self.getTrainsBeforeDesignatedStop()
 
         # Iterate list
-        for entity in preferredTrainsList:
+        for entity in availableTrainsList:
 
             # Create holder variables for future use
             firstStopRecorded = False
@@ -156,5 +152,13 @@ class ManageData:
 
                     # Save train's ETA to preferred station
                     # NOTE: Subtracting POSIX time which is in seconds
-                    tmpKey = entity.id + " - " + entity.trip_update.trip.route_id + " Train"
-                    self.trainsETADict[tmpKey] = (currStation.arrival.time - currStopHolder) // 60
+                    tmpETA = (currStation.arrival.time - currStopHolder) // 60
+
+                    if tmpETA <= 1:
+                        print("{} train is at the station".format(entity.trip_update.trip.route_id))
+                    else:
+                        print("{} train arriving in {} minutes".format(entity.trip_update.trip.route_id, tmpETA))
+
+                else:
+                    # print("Unable to find {} in train's route".format(stop_id))
+                    pass

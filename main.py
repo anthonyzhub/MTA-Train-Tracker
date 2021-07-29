@@ -3,23 +3,25 @@ from access import Access
 from stations import StationsData
 from manage import ManageData
 
-if __name__ == "__main__":
+def main():
 
     # Load CSV as pandas' data frame
     stationsClass = StationsData()
-    stationsClass.stationIDToName()
+    stationsClass.saveStationToDict()
 
-    # Connect to MTA
+    # Initialize class before connecting to MTA
     accessClass = Access()
     accessClass.getData()
 
-    # Initialize class to manipulate data
-    managementClass = ManageData(accessClass.raw_proto_buff_data, stationsClass.stationNamesDict)
+    # Manipulate Data
+    managementClass = ManageData(accessClass.protocolBufferDataList, stationsClass.savedStationsDict)
 
-    upcomingTrainToHuntsPoint = managementClass.getTrainsBeforeDesignatedStop("Hunts Point Av")
-    managementClass.calculateTrainsETAToStation(upcomingTrainToHuntsPoint, "Hunts Point Av")
+    # Print a train's ETA for each station
+    for station in stationsClass.preferredStationsList:
+        managementClass.setPreferredStation(station)
+        managementClass.calculateTrainsETAToStation()
+        print()
 
-    upcomingTrainToSimpsonSt = managementClass.getTrainsBeforeDesignatedStop("Simpson St")
-    managementClass.calculateTrainsETAToStation(upcomingTrainToSimpsonSt, "Simpson St")
+if __name__ == "__main__":
 
-    managementClass.printETADictionary()
+    main()
