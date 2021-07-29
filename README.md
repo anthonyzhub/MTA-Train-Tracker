@@ -8,7 +8,6 @@ A Python program that extracts data from New York City's MTA using a public API 
 - The arrival and departure time is in Epoch/POSIX format. 
     I.e. Time passed since January 1, 1970
 - Accept terms & condition to get all available data from MTA (http://web.mta.info/developers/developer-data-terms.html#data)
-- Stations to look out for (Hunts Point - 6 train) and (Simpson St. - 2 & 5 train)
 
 # Libraries needed
 1. GTFS Realtime Bindings.
